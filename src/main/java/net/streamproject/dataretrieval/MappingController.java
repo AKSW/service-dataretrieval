@@ -1,7 +1,11 @@
 package net.streamproject.dataretrieval;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileWriter;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.HashMap;
@@ -17,6 +21,11 @@ import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.jena.query.*;
 import org.apache.jena.rdf.model.*;
+import org.apache.jena.riot.Lang;
+import org.apache.jena.riot.RDFDataMgr;
+import org.apache.jena.sparql.modify.request.QuadDataAcc;
+import org.apache.jena.sparql.modify.request.UpdateDataInsert;
+import org.apache.jena.update.UpdateExecutionFactory;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -98,21 +107,38 @@ public class MappingController {
 		if (mapping.getStatus() == Status.RUNNING)
 			return mapping;
 		
-		//TODO <- if it is not running, then get the data and the mappings, start RMLMapper with it, write it into a specific graph and return the graph URI
+		// get the data and the mappings
 		JSONObject nomad_archive_result = this.callNOMAD(id);
 		if (nomad_archive_result.containsKey("error")) {
 			mapping.setStatus(Status.ERROR);
 			mapping.setError(nomad_archive_result.get("error").toString());
 			return mapping;
 		}
-		
+		System.out.println("NOMAD data:\n"+nomad_archive_result.toJSONString().substring(0, 100));
+		File tempFile; // save json in file for RMLMapper
+		try {
+			tempFile = File.createTempFile("NOMAD-", ".json");
+			tempFile.deleteOnExit();
+			FileWriter myWriter = new FileWriter(tempFile);
+		    myWriter.write(nomad_archive_result.toJSONString());
+		    myWriter.close();
+		} catch (Exception e) {
+			e.printStackTrace();
+			mapping.setStatus(Status.ERROR);
+			mapping.setError(e.getMessage());
+			return mapping;
+		}
 		String rml_mapping = this.getRMLMapping(mapping);
 		if (rml_mapping.startsWith("ERROR:")) {
 			mapping.setStatus(Status.ERROR);
 			mapping.setError(rml_mapping);
 			return mapping;
 		}
+		// replace placeholder with path to json file
+		rml_mapping = rml_mapping.replace("RMLMAPPER-FILE-URL_REPLACEMENT", tempFile.getAbsolutePath());
+		System.out.println("RML:\n"+rml_mapping);
 
+		// start RMLMapper with it
 		String mapping_result = "";
         try { // See https://github.com/RMLio/rmlmapper-java/blob/master/src/test/java/be/ugent/rml/readme/ReadmeTest.java
         	// Get the mapping string stream
@@ -148,7 +174,13 @@ public class MappingController {
 			return mapping;
 		}
         
+        // write it into a specific graph and return the graph URI
         String graph = this.writeRDFToGraph(mapping_result);
+        if (graph.length() < 1) {
+        	mapping.setStatus(Status.ERROR);
+			mapping.setError("target graph could not be created");
+			return mapping;
+        }
         mapping.setTargetGraph(graph);
         mapping.setStatus(Status.FINISHED);
 		
@@ -161,6 +193,20 @@ public class MappingController {
 	 * @return String graph
 	 */
 	private String writeRDFToGraph(String rdf) {
+		
+		UpdateExecutionFactory.createRemote(new UpdateDataInsert(new QuadDataAcc()), "", this.getClient());
+		// using a string for an insert is not possible.
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
 		return "";
 	}
 	
@@ -172,16 +218,20 @@ public class MappingController {
 	 */
 	private String getRMLMapping(Mapping mapping) {
 		
-		/*
-		String queryString = "PREFIX d: <http://dataretrieval.stream-projekt.net/>  SELECT * FROM NAMED <http://dataretrieval.stream-projekt.net/> { GRAPH ?g { ?s ?p ?o . ?s a d:Mapping . ?s d:id \""+id+"\" . ?s d:Repository d:"+repository+" } }" ;
+		// TODO read graph URI from mapping
+		String queryString = "PREFIX d: <http://dataretrieval.stream-projekt.net/>  CONSTRUCT { ?s ?p ?o } WHERE { GRAPH <http://dataretrieval.stream-projekt.net/mappings/test/> { ?s ?p ?o } . }" ;
 		QueryExecution qexec = QueryExecutionFactory.sparqlService(this.getEndpoint(), queryString, this.getClient());
 		Model model = qexec.execConstruct();
-		*/
 		
+		OutputStream outputStream = new ByteArrayOutputStream();
+		RDFDataMgr.write(outputStream, model, Lang.TURTLE);
+		String rdf = new String(((ByteArrayOutputStream) outputStream).toByteArray());
 		
+		qexec.close();
 		
-		
-		return "ERROR: No mapping";
+		if (rdf.length() < 3)
+			return "ERROR: No mapping";
+		return rdf;
 	}
 	
 	/**
