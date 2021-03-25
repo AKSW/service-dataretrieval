@@ -8,6 +8,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
@@ -23,9 +25,6 @@ import org.apache.jena.query.*;
 import org.apache.jena.rdf.model.*;
 import org.apache.jena.riot.Lang;
 import org.apache.jena.riot.RDFDataMgr;
-import org.apache.jena.sparql.modify.request.QuadDataAcc;
-import org.apache.jena.sparql.modify.request.UpdateDataInsert;
-import org.apache.jena.update.UpdateExecutionFactory;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -166,16 +165,17 @@ public class MappingController {
             QuadStore result = executor.execute(null);
 
             // Output the result
-            mapping_result = result.toSortedString();
+            mapping_result = result.toSortedString().replaceAll(" null", " .");
 		} catch (Exception e) {
             e.printStackTrace();
 			mapping.setStatus(Status.ERROR);
 			mapping.setError(e.getMessage());
 			return mapping;
 		}
+        System.out.println("mapping result:\n"+mapping_result);
         
         // write it into a specific graph and return the graph URI
-        String graph = this.writeRDFToGraph(mapping_result);
+        String graph = this.writeRDFToGraph(mapping_result, mapping.getId());
         if (graph.length() < 1) {
         	mapping.setStatus(Status.ERROR);
 			mapping.setError("target graph could not be created");
@@ -192,22 +192,46 @@ public class MappingController {
 	 * @param rdf String
 	 * @return String graph
 	 */
-	private String writeRDFToGraph(String rdf) {
+	private String writeRDFToGraph(String mapping_result, String id) {
+		String graph = "http://dataretrieval.stream-projekt.net/results/"+id;
+		String query_string = "INSERT data into  <"+graph+"> { "+mapping_result+" }";
+		System.out.println("Insert string:\n"+query_string);
 		
-		UpdateExecutionFactory.createRemote(new UpdateDataInsert(new QuadDataAcc()), "", this.getClient());
-		// using a string for an insert is not possible.
+		// Jena and virtuoso do not work together on SPARQL update requests, thus the virtuoso sparql endpoint has to be called directly
+		try {
+
+            URL url = new URL(this.getEndpoint()+"?query="+URLEncoder.encode(query_string, StandardCharsets.UTF_8.toString())+"&format=text%2Fturtle&run=+Run+Query+");
+
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.connect(); // authentification is missing
+
+            //Getting the response code
+            int responsecode = conn.getResponseCode();
+
+            if (responsecode != 200) {
+                throw new RuntimeException("HttpResponseCode: " + responsecode);
+            } else {
+
+                String inline = "";
+                Scanner scanner = new Scanner(url.openStream());
+
+                //Write all the JSON data into a string using a scanner
+                while (scanner.hasNext()) {
+                    inline += scanner.nextLine();
+                }
+
+                //Close the scanner
+                scanner.close();
+
+                System.out.println("SPARQL Update result:\n"+inline);
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
 		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		return "";
+		return graph;
 	}
 	
 	/**
@@ -219,7 +243,7 @@ public class MappingController {
 	private String getRMLMapping(Mapping mapping) {
 		
 		// TODO read graph URI from mapping
-		String queryString = "PREFIX d: <http://dataretrieval.stream-projekt.net/>  CONSTRUCT { ?s ?p ?o } WHERE { GRAPH <http://dataretrieval.stream-projekt.net/mappings/test/> { ?s ?p ?o } . }" ;
+		String queryString = "CONSTRUCT { ?s ?p ?o } WHERE { GRAPH <http://dataretrieval.stream-projekt.net/mappings/test/> { ?s ?p ?o } . }" ;
 		QueryExecution qexec = QueryExecutionFactory.sparqlService(this.getEndpoint(), queryString, this.getClient());
 		Model model = qexec.execConstruct();
 		
