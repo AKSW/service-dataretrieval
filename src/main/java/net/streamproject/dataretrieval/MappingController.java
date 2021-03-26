@@ -14,11 +14,13 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
 
+import org.apache.http.HttpResponse;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.Credentials;
 import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.jena.query.*;
@@ -48,6 +50,7 @@ public class MappingController {
 			return env.get("SPARQL_URL");
 		return endpoint;
 	}
+	private static String baseURI = "http://dataretrieval.stream-projekt.net/";
 
 	/**
 	 * GET route for reading a mapping from the SPARQL endpoint
@@ -66,7 +69,7 @@ public class MappingController {
 		
 		try {
 			// check RDF graph if the id on the repository is known and what the status is
-			String queryString = "PREFIX d: <http://dataretrieval.stream-projekt.net/>  SELECT * FROM NAMED <http://dataretrieval.stream-projekt.net/> { GRAPH ?g { ?s ?p ?o . ?s a d:Mapping . ?s d:id \""+id+"\" . ?s d:Repository d:"+repository+" } }" ;
+			String queryString = "PREFIX d: <"+MappingController.baseURI+">  SELECT * FROM NAMED <"+MappingController.baseURI+"> { GRAPH ?g { ?s ?p ?o . ?s a d:Mapping . ?s d:id \""+id+"\" . ?s d:Repository d:"+repository+" } }" ;
 			QueryExecution qexec = QueryExecutionFactory.sparqlService(this.getEndpoint(), queryString, this.getClient());
 			ResultSet results = qexec.execSelect() ;
 		    for ( ; results.hasNext() ; )
@@ -77,14 +80,14 @@ public class MappingController {
 		      RDFNode l = soln.get("o") ;   // Get a result variable by name.
 		      System.out.println(x.toString() + " " + r.toString() + " " + l.toString() + " .");
 		      
-		      switch (r.toString()) {
-			      case "http://dataretrieval.stream-projekt.net/Status":
+		      switch (r.toString().substring(MappingController.baseURI.length())) {
+			      case "Status":
 			    	  mapping.setStatus(Status.valueOf(l.toString()));
 			    	  break;
-			      case "http://dataretrieval.stream-projekt.net/Error":
+			      case "Error":
 			    	  mapping.setError(l.toString());
 			    	  break;
-			      case "http://dataretrieval.stream-projekt.net/TargetGraph":
+			      case "TargetGraph":
 			    	  mapping.setTargetGraph(l.toString());
 			    	  break;
 		      }
@@ -113,7 +116,7 @@ public class MappingController {
 			mapping.setError(nomad_archive_result.get("error").toString());
 			return mapping;
 		}
-		System.out.println("NOMAD data:\n"+nomad_archive_result.toJSONString().substring(0, 100));
+		System.out.println("NOMAD data:\n"+nomad_archive_result.toJSONString().substring(0, 400));
 		File tempFile; // save json in file for RMLMapper
 		try {
 			tempFile = File.createTempFile("NOMAD-", ".json");
@@ -183,8 +186,51 @@ public class MappingController {
         }
         mapping.setTargetGraph(graph);
         mapping.setStatus(Status.FINISHED);
+        
+        this.writeMapping(mapping);
+        
+        // TODO execute Lime
 		
 		return mapping;
+	}
+	
+	/**
+	 * This will write the mapping into the graph in order that the information is available.
+	 * It will erase the existing mapping beforehand. 
+	 * @param mapping Mapping
+	 */
+	private void writeMapping(Mapping mapping) {
+		String query_string = "PREFIX d: <"+MappingController.baseURI+">\n"
+				+ "DELETE { GRAPH <"+MappingController.baseURI+"> {\n"
+				+ "  ?s ?p ?o } } where {\n"
+				+ "?s ?p ?o . filter ( ?s = <"+MappingController.baseURI+"mapping"+mapping.getId()+">) \n"
+				+ " }\n"
+				+ "INSERT data into  <"+MappingController.baseURI+"> { <"+MappingController.baseURI+mapping.getId()+"> a d:Mapping .\n"
+				+ "<"+MappingController.baseURI+mapping.getId()+">  d:id \""+mapping.getId()+"\" .\n"
+				+ "<"+MappingController.baseURI+mapping.getId()+">  d:Repository d:"+mapping.getRepository().toString()+" .\n"
+				+ "<"+MappingController.baseURI+mapping.getId()+">  d:TargetGraph <"+mapping.getTargetGraph()+"> .\n"
+				+ "<"+MappingController.baseURI+mapping.getId()+">  d:Status \""+mapping.getStatus().toString()+"\". }";
+		System.out.println("Update string:\n"+query_string);
+		
+		// Jena and virtuoso do not work together on SPARQL update requests, thus the virtuoso sparql endpoint has to be called directly
+		try {
+
+            URL url = new URL(this.getEndpoint()+"?query="+URLEncoder.encode(query_string, StandardCharsets.UTF_8.toString())+"&format=text%2Fturtle&run=+Run+Query+");
+
+            HttpClient client = this.getClient();
+            HttpGet get = new HttpGet(url.toString());
+            HttpResponse response = client.execute(get);
+
+            if (response.getStatusLine().getStatusCode() != 200) {
+                throw new RuntimeException("HttpResponseCode: " + response.getStatusLine().toString());
+            } else {
+
+                System.out.println("SPARQL Update result:\n"+response.getEntity().toString());
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
 	}
 	
 	/**
@@ -193,8 +239,8 @@ public class MappingController {
 	 * @return String graph
 	 */
 	private String writeRDFToGraph(String mapping_result, String id) {
-		String graph = "http://dataretrieval.stream-projekt.net/results/"+id;
-		String query_string = "INSERT data into  <"+graph+"> { "+mapping_result+" }";
+		String graph = MappingController.baseURI+"results/"+id;
+		String query_string = "CLEAR GRAPH <"+graph+"> INSERT data into  <"+graph+"> { "+mapping_result+" }";
 		System.out.println("Insert string:\n"+query_string);
 		
 		// Jena and virtuoso do not work together on SPARQL update requests, thus the virtuoso sparql endpoint has to be called directly
@@ -202,29 +248,15 @@ public class MappingController {
 
             URL url = new URL(this.getEndpoint()+"?query="+URLEncoder.encode(query_string, StandardCharsets.UTF_8.toString())+"&format=text%2Fturtle&run=+Run+Query+");
 
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.connect(); // authentification is missing
+            HttpClient client = this.getClient();
+            HttpGet get = new HttpGet(url.toString());
+            HttpResponse response = client.execute(get);
 
-            //Getting the response code
-            int responsecode = conn.getResponseCode();
-
-            if (responsecode != 200) {
-                throw new RuntimeException("HttpResponseCode: " + responsecode);
+            if (response.getStatusLine().getStatusCode() != 200) {
+                throw new RuntimeException("HttpResponseCode: " + response.getStatusLine().toString());
             } else {
 
-                String inline = "";
-                Scanner scanner = new Scanner(url.openStream());
-
-                //Write all the JSON data into a string using a scanner
-                while (scanner.hasNext()) {
-                    inline += scanner.nextLine();
-                }
-
-                //Close the scanner
-                scanner.close();
-
-                System.out.println("SPARQL Update result:\n"+inline);
+                System.out.println("SPARQL Insert result:\n"+response.getEntity().toString());
             }
 
         } catch (Exception e) {
@@ -243,7 +275,7 @@ public class MappingController {
 	private String getRMLMapping(Mapping mapping) {
 		
 		// TODO read graph URI from mapping
-		String queryString = "CONSTRUCT { ?s ?p ?o } WHERE { GRAPH <http://dataretrieval.stream-projekt.net/mappings/test/> { ?s ?p ?o } . }" ;
+		String queryString = "CONSTRUCT { ?s ?p ?o } WHERE { GRAPH <"+MappingController.baseURI+"mappings/test/> { ?s ?p ?o } . }" ;
 		QueryExecution qexec = QueryExecutionFactory.sparqlService(this.getEndpoint(), queryString, this.getClient());
 		Model model = qexec.execConstruct();
 		
