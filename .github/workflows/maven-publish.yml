@@ -5,7 +5,7 @@ name: Docker push to Github
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
 
 jobs:
   build_and_push:
