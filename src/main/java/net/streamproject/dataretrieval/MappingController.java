@@ -116,6 +116,7 @@ public class MappingController {
 		if (nomad_archive_result.containsKey("error")) {
 			mapping.setStatus(Status.ERROR);
 			mapping.setError(nomad_archive_result.get("error").toString());
+			this.writeMapping(mapping);
 			return mapping;
 		}
 		System.out.println("NOMAD data:\n"+nomad_archive_result.toJSONString().substring(0, 400));
@@ -130,12 +131,14 @@ public class MappingController {
 			e.printStackTrace();
 			mapping.setStatus(Status.ERROR);
 			mapping.setError(e.getMessage());
+			this.writeMapping(mapping);
 			return mapping;
 		}
 		String rml_mapping = this.getRMLMapping(mapping);
 		if (rml_mapping.startsWith("ERROR:")) {
 			mapping.setStatus(Status.ERROR);
 			mapping.setError(rml_mapping);
+			this.writeMapping(mapping);
 			return mapping;
 		}
 		// replace placeholder with path to json file
@@ -175,6 +178,7 @@ public class MappingController {
             e.printStackTrace();
 			mapping.setStatus(Status.ERROR);
 			mapping.setError(e.getMessage());
+			this.writeMapping(mapping);
 			return mapping;
 		}
         System.out.println("mapping result:\n"+mapping_result);
@@ -184,6 +188,7 @@ public class MappingController {
         if (graph.length() < 1) {
         	mapping.setStatus(Status.ERROR);
 			mapping.setError("target graph could not be created");
+			this.writeMapping(mapping);
 			return mapping;
         }
         mapping.setTargetGraph(graph);
@@ -353,7 +358,7 @@ public class MappingController {
 		if (env.containsKey("SPARQL_PASSWORD"))
 			password = env.get("SPARQL_PASSWORD");
 		if (env.containsKey("SPARQL_PORT"))
-			password = env.get("SPARQL_PORT");
+			port = env.get("SPARQL_PORT");
 		
 		CredentialsProvider credsProvider = new BasicCredentialsProvider();
 		Credentials unscopedCredentials = new UsernamePasswordCredentials(username, password);
@@ -361,7 +366,7 @@ public class MappingController {
 		Credentials scopedCredentials = new UsernamePasswordCredentials(username, password);
 		final String host = this.getEndpoint();
 		final String realm = "SPARQL Endpoint";
-		final String schemeName = "DIGEST";
+		final String schemeName = "Digest";
 		AuthScope authscope = new AuthScope(host, Integer.parseInt(port), realm, schemeName);
 		credsProvider.setCredentials(authscope, scopedCredentials);
 		HttpClient httpclient = HttpClients.custom()
