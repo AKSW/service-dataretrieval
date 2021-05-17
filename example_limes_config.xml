@@ -17,14 +17,18 @@
   <NAMESPACE>http://test.de/</NAMESPACE>
   <LABEL>test</LABEL>
 </PREFIX>
+<PREFIX>
+  <NAMESPACE>http://www.w3.org/2002/07/owl#</NAMESPACE>
+  <LABEL>owl</LABEL>
+</PREFIX>
 
 <SOURCE>
   <ID>sourceId</ID>
-  <ENDPOINT>/Users/kurt/Downloads/test.ttl</ENDPOINT>
+  <ENDPOINT>/Users/kurt/Documents/Spring/dataretrieval/example_data.ttl</ENDPOINT>
   <VAR>?s</VAR>
   <PAGESIZE>1000</PAGESIZE>
   <RESTRICTION></RESTRICTION>
-  <PROPERTY>test:repotype</PROPERTY>
+  <PROPERTY>test:repotype AS nolang->lowercase RENAME name</PROPERTY>
 
 
   <TYPE>TURTLE</TYPE>
@@ -35,13 +39,13 @@
   <VAR>?t</VAR>
   <PAGESIZE>1000</PAGESIZE>
   <RESTRICTION>?t dct:subject dbr:International_cultural_organizations</RESTRICTION>
-  <PROPERTY>rdfs:label</PROPERTY>
+  <PROPERTY>rdfs:label AS nolang->lowercase RENAME name</PROPERTY>
 
 
   <TYPE>sparql</TYPE>
 </TARGET>
 <METRIC>
-  exactmatch(s.test:repotype,t.rdfs:label|0.9
+  exactmatch(s.name,t.name)
 </METRIC>
 <ACCEPTANCE>
   <THRESHOLD>0.98</THRESHOLD>
