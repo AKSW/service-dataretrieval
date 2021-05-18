@@ -24,7 +24,7 @@
 
 <SOURCE>
   <ID>sourceId</ID>
-  <ENDPOINT>/Users/kurt/Documents/Spring/dataretrieval/example_data.ttl</ENDPOINT>
+  <ENDPOINT>./example_data.ttl</ENDPOINT>
   <VAR>?s</VAR>
   <PAGESIZE>1000</PAGESIZE>
   <RESTRICTION></RESTRICTION>
