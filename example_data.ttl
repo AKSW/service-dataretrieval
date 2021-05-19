@@ -1,0 +1,7 @@
+<http://nomad-lab.eu/experiment/baBkU4yx2wQ1WIQJxuEZhKWq02bS-PACv39BKSFKLtphwxzY-Og>      <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://emmo.info/emmo/Experiment> .
+<http://nomad-lab.eu/experiment/baBkU4yx2wQ1WIQJxuEZhKWq02bS-PACv39BKSFKLtphwxzY-Og>      <http://emmo.info/emmo/hasParticipant>
+"1d279d31-6a26-42a1-8591-870303da6f04" .
+<http://nomad-lab.eu/experiment/baBkU4yx2wQ1WIQJxuEZhKWq02bS-PACv39BKSFKLtphwxzY-Og>      <http://www.w3.org/ns/dcat#modified>
+"2020-09-23T14:37:23.645582" .
+<http://nomad-lab.eu/experiment/baBkU4yx2wQ1WIQJxuEZhKWq02bS-PACv39BKSFKLtphwxzY-Og> <http://www.w3.org/2000/01/rdf-schema#label> "O2" .
+<http://nomad-lab.eu/experiment/baBkU4yx2wQ1WIQJxuEZhKWq02bS-PACv39BKSFKLtphwxzY-Og> <http://test.de/repotype> "NOMAD"@en .
