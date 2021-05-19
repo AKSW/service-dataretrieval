@@ -37,6 +37,8 @@ public class Mapping {
 		this.error = error;
 	}
 	public String getTargetGraph() {
+		if (targetGraph == null || targetGraph.length() < 1)
+			return "http://dataretrieval.stream-projekt.net/";
 		return targetGraph;
 	}
 	public void setTargetGraph(String targetGraph) {

@@ -4,16 +4,20 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileWriter;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
 
+import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpResponse;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.Credentials;
@@ -52,7 +56,7 @@ public class MappingController {
 			return env.get("SPARQL_URL");
 		return endpoint;
 	}
-	private static String baseURI = "http://dataretrieval.stream-projekt.net/";
+	private static String baseURI = "http://dataretrieval.stream-dataspace.net/";
 
 	/**
 	 * GET route for reading a mapping from the SPARQL endpoint
@@ -68,6 +72,8 @@ public class MappingController {
 	// See https://jena.apache.org/documentation/query/app_api.html
 	private Mapping readMapping(String id, DataRepository repository) {
 		Mapping mapping = new Mapping(id, Status.UNKNOWN, repository, "", "");
+		
+		System.out.println(this.getEndpoint());
 		
 		try {
 			// check RDF graph if the id on the repository is known and what the status is
@@ -103,13 +109,19 @@ public class MappingController {
 		return mapping;
 	}
 	
-	// TODO write mapping into graph on error before sending it
+	// write mapping into graph on error before sending it
 	@GetMapping("/startExecution")
 	public Mapping startExecution(@RequestParam(value = "id", defaultValue = "") String id, @RequestParam(value = "repository", defaultValue = "NOMAD") DataRepository repository) {
 		// check RDF graph if the id on the repository is known and what the status is
 		Mapping mapping = this.readMapping(id, repository);
 		if (mapping.getStatus() == Status.RUNNING)
 			return mapping;
+		else {
+			//clean error if set
+			mapping.setError("");
+			mapping.setStatus(Status.RUNNING);
+			this.writeMapping(mapping);
+		}
 		
 		// get the data and the mappings
 		JSONObject nomad_archive_result = this.callNOMAD(id);
@@ -119,7 +131,7 @@ public class MappingController {
 			this.writeMapping(mapping);
 			return mapping;
 		}
-		System.out.println("NOMAD data:\n"+nomad_archive_result.toJSONString().substring(0, 400));
+		System.out.println("NOMAD data:\n"+nomad_archive_result.toJSONString().substring(0, 400) + " ...");
 		File tempFile; // save json in file for RMLMapper
 		try {
 			tempFile = File.createTempFile("NOMAD-", ".json");
@@ -183,6 +195,27 @@ public class MappingController {
 		}
         System.out.println("mapping result:\n"+mapping_result);
         
+        // execute Lime and add the sameAs triples
+        String sameAs = "";
+        try {
+        	sameAs = this.executeLimes();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+        if (sameAs.length() > 0) {
+        	String sameAs_without_prefixes = "";
+        	String[] lines = sameAs.split(System.getProperty("line.separator"));
+        	System.out.println("sameAs: " + sameAs + System.getProperty("line.separator") + "lines number: " + lines.length);
+        	int i = 0;
+        	for (; i < lines.length; i++) {
+        		if (lines[i].startsWith("@prefix"))
+        			continue;
+        		sameAs_without_prefixes += System.getProperty("line.separator") + lines[i];
+        	}
+        	System.out.println("sameAs_without_prefixes: " + sameAs_without_prefixes);
+        	mapping_result += System.getProperty("line.separator") + sameAs_without_prefixes;
+        }
+        
         // write it into a specific graph and return the graph URI
         String graph = this.writeRDFToGraph(mapping_result, mapping.getId());
         if (graph.length() < 1) {
@@ -196,9 +229,45 @@ public class MappingController {
         
         this.writeMapping(mapping);
         
-        // TODO execute Lime
 		
 		return mapping;
+	}
+	
+	/**
+	 * Does execute LIMES with the given configuration file.
+	 * Atm every call writes into the same output file.
+	 * @return String turtle
+	 * @throws IOException
+	 */
+	private String executeLimes() throws IOException {
+		String config = "example_limes_config.xml";
+		Map<String, String> env = System.getenv();
+		if (env.containsKey("LIMES_CONFIG"))
+			config = env.get("LIMES_CONFIG");
+		
+		// Run a java app in a separate system process
+		Process proc = Runtime.getRuntime().exec("java -jar limes.jar " + config);
+		// Then retrieve the process output
+		InputStream in = proc.getInputStream();
+		InputStream err = proc.getErrorStream();
+		
+		String output = IOUtils.toString(in, StandardCharsets.UTF_8) + "; Error: "+IOUtils.toString(err, StandardCharsets.UTF_8);
+		System.out.println(output);
+		
+		String accepted = Files.readString(Paths.get("./accepted.nt"), StandardCharsets.US_ASCII);
+		
+		return accepted;
+	}
+	
+	@GetMapping("/test")
+	public String test() {
+		try {
+			return this.executeLimes();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			return "";
+		}
 	}
 	
 	/**
@@ -216,6 +285,7 @@ public class MappingController {
 				+ "<"+MappingController.baseURI+mapping.getId()+">  d:id \""+mapping.getId()+"\" .\n"
 				+ "<"+MappingController.baseURI+mapping.getId()+">  d:Repository d:"+mapping.getRepository().toString()+" .\n"
 				+ "<"+MappingController.baseURI+mapping.getId()+">  d:TargetGraph <"+mapping.getTargetGraph()+"> .\n"
+				+ "<"+MappingController.baseURI+mapping.getId()+">  d:Error \""+mapping.getError()+"\" .\n"
 				+ "<"+MappingController.baseURI+mapping.getId()+">  d:Status \""+mapping.getStatus().toString()+"\". }";
 		System.out.println("Update string:\n"+query_string);
 		
@@ -305,8 +375,10 @@ public class MappingController {
 	private JSONObject callNOMAD(String id) {
 		JSONObject ret = new JSONObject();
 		try {
-
-            URL url = new URL("https://nomad-lab.eu/prod/rae/api/archive/"+id);
+			// use calc_id and upload_id
+			String upload_id = id.split("/")[0];
+			String calc_id = id.split("/")[1];
+            URL url = new URL("http://nomad-lab.eu/prod/rae/api/archive/"+upload_id+"/"+calc_id);
 
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
