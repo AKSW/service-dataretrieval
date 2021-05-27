@@ -38,7 +38,7 @@ public class Mapping {
 	}
 	public String getTargetGraph() {
 		if (targetGraph == null || targetGraph.length() < 1)
-			return "http://dataretrieval.stream-projekt.net/";
+			return "http://dataretrieval.stream-dataspace.net/";
 		return targetGraph;
 	}
 	public void setTargetGraph(String targetGraph) {

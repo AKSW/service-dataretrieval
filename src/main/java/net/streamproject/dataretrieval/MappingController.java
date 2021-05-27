@@ -136,6 +136,12 @@ public class MappingController {
 		}
 		
 		// get the data and the mappings
+		if (mapping.getRepository() == DataRepository.DSMS) {
+			mapping.setStatus(Status.ERROR);
+			mapping.setError("DSMS is not yet supported for startExecution. Reason is missing JSON API.");
+			this.writeMapping(mapping);
+			return mapping;
+		}
 		JSONObject nomad_archive_result = this.callNOMAD(id);
 		if (nomad_archive_result.containsKey("error")) {
 			mapping.setStatus(Status.ERROR);
