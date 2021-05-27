@@ -69,12 +69,18 @@ public class MappingController {
 		return this.readMapping(id, repository);
 	}
 	
-	// See https://jena.apache.org/documentation/query/app_api.html
+	/**
+	 * Does read the mapping with Jena and return the complete mapping object
+	 * @param id
+	 * @param repository NOMAD or DSMS
+	 * @return Mapping
+	 */
 	private Mapping readMapping(String id, DataRepository repository) {
 		Mapping mapping = new Mapping(id, Status.UNKNOWN, repository, "", "");
 		
 		System.out.println(this.getEndpoint());
 		
+		// See https://jena.apache.org/documentation/query/app_api.html
 		try {
 			// check RDF graph if the id on the repository is known and what the status is
 			String queryString = "PREFIX d: <"+MappingController.baseURI+">  SELECT * FROM NAMED <"+MappingController.baseURI+"> { GRAPH ?g { ?s ?p ?o . ?s a d:Mapping . ?s d:id \""+id+"\" . ?s d:Repository d:"+repository+" } }" ;
@@ -109,7 +115,13 @@ public class MappingController {
 		return mapping;
 	}
 	
-	// write mapping into graph on error before sending it
+	/**
+	 * Does execute a complete mapping.
+	 * That means that the data from the data repository is read, mapped to RDF via a RML mapping saved in a RDF store. At the end the rest is stored in the store and the mapping object is returned.
+	 * @param id
+	 * @param repository NOMAD or DSMS
+	 * @return Mapping on error the execution stops and the mapping object is returned.
+	 */
 	@GetMapping("/startExecution")
 	public Mapping startExecution(@RequestParam(value = "id", defaultValue = "") String id, @RequestParam(value = "repository", defaultValue = "NOMAD") DataRepository repository) {
 		// check RDF graph if the id on the repository is known and what the status is
@@ -205,7 +217,7 @@ public class MappingController {
         if (sameAs.length() > 0) {
         	String sameAs_without_prefixes = "";
         	String[] lines = sameAs.split(System.getProperty("line.separator"));
-        	System.out.println("sameAs: " + sameAs + System.getProperty("line.separator") + "lines number: " + lines.length);
+        	//System.out.println("sameAs: " + sameAs + System.getProperty("line.separator") + "lines number: " + lines.length);
         	int i = 0;
         	for (; i < lines.length; i++) {
         		if (lines[i].startsWith("@prefix"))
@@ -245,6 +257,7 @@ public class MappingController {
 		if (env.containsKey("LIMES_CONFIG"))
 			config = env.get("LIMES_CONFIG");
 		
+		// TODO copy config file and replace accept.nt in order to answer multiple requests at once
 		// Run a java app in a separate system process
 		Process proc = Runtime.getRuntime().exec("java -jar limes.jar " + config);
 		// Then retrieve the process output
@@ -257,17 +270,6 @@ public class MappingController {
 		String accepted = Files.readString(Paths.get("./accepted.nt"), StandardCharsets.US_ASCII);
 		
 		return accepted;
-	}
-	
-	@GetMapping("/test")
-	public String test() {
-		try {
-			return this.executeLimes();
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-			return "";
-		}
 	}
 	
 	/**
