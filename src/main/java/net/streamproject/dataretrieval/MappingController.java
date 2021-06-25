@@ -128,8 +128,10 @@ public class MappingController {
 		Mapping mapping = this.readMapping(id, repository);
 		if (mapping.getStatus() == Status.RUNNING)
 			return mapping;
+		else if (mapping.getStatus() == Status.FINISHED)
+			return mapping;
 		else {
-			//clean error if set
+			//clean error if set and set to running
 			mapping.setError("");
 			mapping.setStatus(Status.RUNNING);
 			this.writeMapping(mapping);
@@ -287,7 +289,7 @@ public class MappingController {
 		String query_string = "PREFIX d: <"+MappingController.baseURI+">\n"
 				+ "DELETE { GRAPH <"+MappingController.baseURI+"> {\n"
 				+ "  ?s ?p ?o } } where {\n"
-				+ "?s ?p ?o . filter ( ?s = <"+MappingController.baseURI+"mapping"+mapping.getId()+">) \n"
+				+ "?s ?p ?o . filter ( ?s = <"+MappingController.baseURI+mapping.getId()+">) \n"
 				+ " }\n"
 				+ "INSERT data into  <"+MappingController.baseURI+"> { <"+MappingController.baseURI+mapping.getId()+"> a d:Mapping .\n"
 				+ "<"+MappingController.baseURI+mapping.getId()+">  d:id \""+mapping.getId()+"\" .\n"
